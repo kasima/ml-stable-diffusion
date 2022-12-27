@@ -157,6 +157,25 @@ def quantize_weights_to_8bits(args):
                 f"Skipped quantizing {model_name} (Not found at {out_path})")
 
 
+def palletize_weights(args):
+    for model_name in [
+            "text_encoder", "vae_decoder", "unet", "unet_chunk1",
+            "unet_chunk2", "safety_checker"
+    ]:
+        out_path = _get_out_path(args, model_name)
+        if os.path.exists(out_path):
+            logger.info(f"Pallettizing {model_name}")
+            mlmodel = ct.models.MLModel(out_path,
+                                        compute_units=ct.ComputeUnit.CPU_ONLY)
+            mlmodel = ct.compression_utils.palettize_weights(
+                mlmodel, nbits=4, mode="kmeans")
+            mlmodel.save(out_path)
+            logger.info("Done")
+        else:
+            logger.info(
+                f"Skipped pallettizing {model_name} (Not found at {out_path})")
+
+
 def _compile_coreml_model(source_model_path, output_dir, final_name):
     """ Compiles Core ML models using the coremlcompiler utility from Xcode toolchain
     """
@@ -828,6 +847,12 @@ def main(args):
         quantize_weights_to_8bits(args)
         logger.info("Quantized weights to 8-bit precision")
 
+    if args.pallettize_weights:
+        # Note: Not recommended, significantly degrades generated image quality
+        logger.info("Pallettizing weights")
+        palletize_weights(args)
+        logger.info("Pallettized weights")
+
 
 def parser_spec():
     parser = argparse.ArgumentParser()
@@ -895,6 +920,13 @@ def parser_spec():
         help=
         ("If specified, quantize 16-bits weights to 8-bits weights in-place for all models. "
          "Not recommended as the generated image quality degraded significantly after 8-bit weight quantization"
+         ))
+    parser.add_argument(
+        "--pallettize-weights",
+        action="store_true",
+        help=
+        ("If specified, construct a lookup table (LUT) to compress a floating-point ML program by reducing the overall number of weights. "
+         "Unsure about results"
          ))
 
     # Swift CLI Resource Bundling
